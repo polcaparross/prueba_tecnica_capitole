@@ -57,4 +57,13 @@ class ProductServiceTest {
         assertEquals("Pantalon azul", response.getName());
         verify(productRepository, times(1)).findById(productId);
     }
+
+    @Test
+    void getProductExceptionNotExist() {
+        Long productId = 1L;
+        when(productRepository.findById(productId)).thenReturn(Optional.empty());
+
+        assertThrows(RuntimeException.class, () -> productService.getProduct(productId));
+        verify(productRepository, times(1)).findById(productId);
+    }
 }
