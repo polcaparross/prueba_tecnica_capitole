@@ -25,8 +25,17 @@ public class PriceService {
 
     @Transactional
     public PriceResponse createPrice(Long productId, PriceRequest request) {
+        if (request.getEndDate() != null && !request.getInitDate().isBefore(request.getEndDate())) {
+            throw new RuntimeException("initDate must be before endDate");
+        }
+
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new RuntimeException("Product not found with id: " + productId));
+
+        List<Price> existingPrices = priceRepository.findByProductIdOrderByInitDateAsc(productId);
+        if (hasOverlap(request, existingPrices)) {
+            throw new RuntimeException("New price overlaps with an existing price range");
+        }
 
         Price price = new Price(
                 product,
@@ -37,6 +46,25 @@ public class PriceService {
 
         Price savedPrice = priceRepository.save(price);
         return mapToPriceResponse(savedPrice);
+    }
+
+    private boolean hasOverlap(PriceRequest request, List<Price> existingPrices) {
+        LocalDate newStart = request.getInitDate();
+        LocalDate newEnd = request.getEndDate();
+
+        for (Price existing : existingPrices) {
+            LocalDate existingStart = existing.getInitDate();
+            LocalDate existingEnd = existing.getEndDate();
+
+            // [A, B] and [C, D] overlap if A <= D and C <= B
+            boolean newStartsBeforeExistingEnds = (existingEnd == null || !newStart.isAfter(existingEnd));
+            boolean existingStartsBeforeNewEnds = (newEnd == null || !existingStart.isAfter(newEnd));
+
+            if (newStartsBeforeExistingEnds && existingStartsBeforeNewEnds) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Transactional(readOnly = true)

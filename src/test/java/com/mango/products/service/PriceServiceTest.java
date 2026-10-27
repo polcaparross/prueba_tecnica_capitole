@@ -56,6 +56,7 @@ class PriceServiceTest {
         savedPrice.setId(1L);
 
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of());
         when(priceRepository.save(any(Price.class))).thenReturn(savedPrice);
 
         PriceResponse response = priceService.createPrice(productId, request);
@@ -120,6 +121,43 @@ class PriceServiceTest {
         PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.now(), null);
 
         when(productRepository.findById(productId)).thenReturn(Optional.empty());
+
+        assertThrows(RuntimeException.class, () -> priceService.createPrice(productId, request));
+    }
+
+    @Test
+    void createPrice_OverlappingDates() {
+        Long productId = 1L;
+        Product product = new Product("Camiseta blanca", "Camiseta basica");
+        product.setId(productId);
+
+        PriceRequest request = new PriceRequest(
+                new BigDecimal("19.99"),
+                LocalDate.of(2026, 1, 1),
+                LocalDate.of(2026, 12, 31)
+        );
+
+        Price existingPrice = new Price(
+                product,
+                new BigDecimal("14.99"),
+                LocalDate.of(2026, 6, 1),
+                null
+        );
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existingPrice));
+
+        assertThrows(RuntimeException.class, () -> priceService.createPrice(productId, request));
+    }
+
+    @Test
+    void createPrice_InvalidDateRange() {
+        Long productId = 1L;
+        PriceRequest request = new PriceRequest(
+                new BigDecimal("19.99"),
+                LocalDate.of(2026, 12, 31),
+                LocalDate.of(2026, 1, 1)
+        );
 
         assertThrows(RuntimeException.class, () -> priceService.createPrice(productId, request));
     }
