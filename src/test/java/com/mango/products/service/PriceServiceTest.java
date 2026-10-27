@@ -4,6 +4,8 @@ import com.mango.products.dto.PriceRequest;
 import com.mango.products.dto.PriceResponse;
 import com.mango.products.dto.PriceValueResponse;
 import com.mango.products.dto.ProductHistoryResponse;
+import com.mango.products.exception.ResourceNotFoundException;
+import com.mango.products.exception.ValidationException;
 import com.mango.products.model.Price;
 import com.mango.products.model.Product;
 import com.mango.products.repository.PriceRepository;
@@ -122,7 +124,7 @@ class PriceServiceTest {
 
         when(productRepository.findById(productId)).thenReturn(Optional.empty());
 
-        assertThrows(RuntimeException.class, () -> priceService.createPrice(productId, request));
+        assertThrows(ResourceNotFoundException.class, () -> priceService.createPrice(productId, request));
     }
 
     @Test
@@ -147,7 +149,7 @@ class PriceServiceTest {
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
         when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existingPrice));
 
-        assertThrows(RuntimeException.class, () -> priceService.createPrice(productId, request));
+        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
     }
 
     @Test
@@ -159,6 +161,6 @@ class PriceServiceTest {
                 LocalDate.of(2026, 1, 1)
         );
 
-        assertThrows(RuntimeException.class, () -> priceService.createPrice(productId, request));
+        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
     }
 }

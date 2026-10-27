@@ -4,6 +4,8 @@ import com.mango.products.dto.PriceRequest;
 import com.mango.products.dto.PriceResponse;
 import com.mango.products.dto.PriceValueResponse;
 import com.mango.products.dto.ProductHistoryResponse;
+import com.mango.products.exception.ResourceNotFoundException;
+import com.mango.products.exception.ValidationException;
 import com.mango.products.model.Price;
 import com.mango.products.model.Product;
 import com.mango.products.repository.PriceRepository;
@@ -26,15 +28,15 @@ public class PriceService {
     @Transactional
     public PriceResponse createPrice(Long productId, PriceRequest request) {
         if (request.getEndDate() != null && !request.getInitDate().isBefore(request.getEndDate())) {
-            throw new RuntimeException("initDate must be before endDate");
+            throw new ValidationException("initDate must be before endDate");
         }
 
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new RuntimeException("Product not found with id: " + productId));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
 
         List<Price> existingPrices = priceRepository.findByProductIdOrderByInitDateAsc(productId);
         if (hasOverlap(request, existingPrices)) {
-            throw new RuntimeException("New price overlaps with an existing price range");
+            throw new ValidationException("New price overlaps with an existing price range");
         }
 
         Price price = new Price(
@@ -70,14 +72,14 @@ public class PriceService {
     @Transactional(readOnly = true)
     public PriceValueResponse getPriceAtDate(Long productId, LocalDate date) {
         Price price = priceRepository.findByProductIdAndDate(productId, date)
-                .orElseThrow(() -> new RuntimeException("Price not found for product id: " + productId + " at date: " + date));
+                .orElseThrow(() -> new ResourceNotFoundException("Price not found for product id: " + productId + " at date: " + date));
         return new PriceValueResponse(price.getValue());
     }
 
     @Transactional(readOnly = true)
     public ProductHistoryResponse getPriceHistory(Long productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new RuntimeException("Product not found with id: " + productId));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
 
         List<Price> prices = priceRepository.findByProductIdOrderByInitDateAsc(productId);
 

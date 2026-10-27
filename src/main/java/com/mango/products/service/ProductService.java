@@ -2,6 +2,7 @@ package com.mango.products.service;
 
 import com.mango.products.dto.ProductRequest;
 import com.mango.products.dto.ProductResponse;
+import com.mango.products.exception.ResourceNotFoundException;
 import com.mango.products.model.Product;
 import com.mango.products.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +25,7 @@ public class ProductService {
     @Transactional(readOnly = true)
     public ProductResponse getProduct(Long id) {
         Product product = productRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Product not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
         return mapToResponse(product);
     }
 

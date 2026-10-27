@@ -2,6 +2,7 @@ package com.mango.products.service;
 
 import com.mango.products.dto.ProductRequest;
 import com.mango.products.dto.ProductResponse;
+import com.mango.products.exception.ResourceNotFoundException;
 import com.mango.products.model.Product;
 import com.mango.products.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
@@ -63,7 +64,7 @@ class ProductServiceTest {
         Long productId = 1L;
         when(productRepository.findById(productId)).thenReturn(Optional.empty());
 
-        assertThrows(RuntimeException.class, () -> productService.getProduct(productId));
+        assertThrows(ResourceNotFoundException.class, () -> productService.getProduct(productId));
         verify(productRepository, times(1)).findById(productId);
     }
 }
