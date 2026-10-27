@@ -1,5 +1,10 @@
-FROM ubuntu:22.04
+FROM grafana/k6:latest AS k6-source
+
+FROM alpine:3.18
+RUN apk add --no-cache curl bash
+COPY --from=k6-source /usr/bin/k6 /usr/bin/k6
 WORKDIR /app
-RUN apt-get update && \
-    apt-get install -y curl jq
-COPY benchmark.sh benchmark.sh
+COPY benchmark.js /app/benchmark.js
+COPY benchmark.sh /app/benchmark.sh
+RUN chmod +x /app/benchmark.sh
+ENTRYPOINT ["/app/benchmark.sh"]
