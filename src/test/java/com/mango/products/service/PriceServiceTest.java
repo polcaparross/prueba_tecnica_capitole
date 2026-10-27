@@ -163,4 +163,77 @@ class PriceServiceTest {
 
         assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
     }
+
+    // Casos límite de solapamiento de rangos de fechas
+
+    @Test
+    void createPrice_Overlap_NewRangeContainsExisting() {
+        Long productId = 1L;
+        Product product = new Product("Camiseta blanca", "Camiseta basica");
+
+        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
+        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30));
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
+
+        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
+    }
+
+    @Test
+    void createPrice_Overlap_ExistingRangeContainsNew() {
+        Long productId = 1L;
+        Product product = new Product("Camiseta blanca", "Camiseta basica");
+
+        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30));
+        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
+
+        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
+    }
+
+    @Test
+    void createPrice_Overlap_NullEndDateInExisting() {
+        Long productId = 1L;
+        Product product = new Product("Camiseta blanca", "Camiseta basica");
+
+        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 31));
+        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 1, 1), null);
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
+
+        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
+    }
+
+    @Test
+    void createPrice_Overlap_NullEndDateInNew() {
+        Long productId = 1L;
+        Product product = new Product("Camiseta blanca", "Camiseta basica");
+
+        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 1, 1), null);
+        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30));
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
+
+        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
+    }
+
+    @Test
+    void createPrice_NoOverlap_AdjacentRanges() {
+        Long productId = 1L;
+        Product product = new Product("Camiseta blanca", "Camiseta basica");
+
+        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 7, 1), null);
+        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30));
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
+        when(priceRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertDoesNotThrow(() -> priceService.createPrice(productId, request));
+    }
 }
