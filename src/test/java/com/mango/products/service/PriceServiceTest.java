@@ -15,14 +15,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,7 +61,7 @@ class PriceServiceTest {
         savedPrice.setId(1L);
 
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of());
+        when(priceRepository.existsOverlappingPrice(eq(productId), any(), any())).thenReturn(false);
         when(priceRepository.save(any(Price.class))).thenReturn(savedPrice);
 
         PriceResponse response = priceService.createPrice(productId, request);
@@ -68,6 +71,7 @@ class PriceServiceTest {
         assertEquals(request.getInitDate(), response.getInitDate());
         assertEquals(request.getEndDate(), response.getEndDate());
         verify(productRepository, times(1)).findById(productId);
+        verify(priceRepository, times(1)).existsOverlappingPrice(eq(productId), any(), any());
         verify(priceRepository, times(1)).save(any(Price.class));
     }
 
@@ -85,13 +89,25 @@ class PriceServiceTest {
                 LocalDate.of(2026, 6, 30)
         );
 
-        when(priceRepository.findByProductIdAndDate(productId, date)).thenReturn(Optional.of(price));
+        when(priceRepository.findValidPrice(eq(productId), eq(date), any(PageRequest.class)))
+                .thenReturn(List.of(price));
 
         PriceValueResponse response = priceService.getPriceAtDate(productId, date);
 
         assertNotNull(response);
         assertEquals(price.getValue(), response.getValue());
-        verify(priceRepository, times(1)).findByProductIdAndDate(productId, date);
+        verify(priceRepository, times(1)).findValidPrice(eq(productId), eq(date), any(PageRequest.class));
+    }
+
+    @Test
+    void getPriceAtDate_NotFound() {
+        Long productId = 1L;
+        LocalDate date = LocalDate.now();
+
+        when(priceRepository.findValidPrice(eq(productId), eq(date), any(PageRequest.class)))
+                .thenReturn(Collections.emptyList());
+
+        assertThrows(ResourceNotFoundException.class, () -> priceService.getPriceAtDate(productId, date));
     }
 
     @Test
@@ -139,15 +155,8 @@ class PriceServiceTest {
                 LocalDate.of(2026, 12, 31)
         );
 
-        Price existingPrice = new Price(
-                product,
-                new BigDecimal("14.99"),
-                LocalDate.of(2026, 6, 1),
-                null
-        );
-
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existingPrice));
+        when(priceRepository.existsOverlappingPrice(eq(productId), any(), any())).thenReturn(true);
 
         assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
     }
@@ -162,78 +171,5 @@ class PriceServiceTest {
         );
 
         assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
-    }
-
-    // Casos límite de solapamiento de rangos de fechas
-
-    @Test
-    void createPrice_Overlap_NewRangeContainsExisting() {
-        Long productId = 1L;
-        Product product = new Product("Camiseta blanca", "Camiseta basica");
-
-        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
-        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30));
-
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
-
-        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
-    }
-
-    @Test
-    void createPrice_Overlap_ExistingRangeContainsNew() {
-        Long productId = 1L;
-        Product product = new Product("Camiseta blanca", "Camiseta basica");
-
-        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30));
-        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
-
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
-
-        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
-    }
-
-    @Test
-    void createPrice_Overlap_NullEndDateInExisting() {
-        Long productId = 1L;
-        Product product = new Product("Camiseta blanca", "Camiseta basica");
-
-        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 31));
-        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 1, 1), null);
-
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
-
-        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
-    }
-
-    @Test
-    void createPrice_Overlap_NullEndDateInNew() {
-        Long productId = 1L;
-        Product product = new Product("Camiseta blanca", "Camiseta basica");
-
-        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 1, 1), null);
-        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30));
-
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
-
-        assertThrows(ValidationException.class, () -> priceService.createPrice(productId, request));
-    }
-
-    @Test
-    void createPrice_NoOverlap_AdjacentRanges() {
-        Long productId = 1L;
-        Product product = new Product("Camiseta blanca", "Camiseta basica");
-
-        PriceRequest request = new PriceRequest(new BigDecimal("19.99"), LocalDate.of(2026, 7, 1), null);
-        Price existing = new Price(product, new BigDecimal("14.99"), LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30));
-
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-        when(priceRepository.findByProductIdOrderByInitDateAsc(productId)).thenReturn(List.of(existing));
-        when(priceRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-
-        assertDoesNotThrow(() -> priceService.createPrice(productId, request));
     }
 }

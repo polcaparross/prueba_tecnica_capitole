@@ -11,6 +11,7 @@ import com.mango.products.model.Product;
 import com.mango.products.repository.PriceRepository;
 import com.mango.products.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,8 +35,7 @@ public class PriceService {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
 
-        List<Price> existingPrices = priceRepository.findByProductIdOrderByInitDateAsc(productId);
-        if (hasOverlap(request, existingPrices)) {
+        if (priceRepository.existsOverlappingPrice(productId, request.getInitDate(), request.getEndDate())) {
             throw new ValidationException("New price overlaps with an existing price range");
         }
 
@@ -50,30 +50,13 @@ public class PriceService {
         return mapToPriceResponse(savedPrice);
     }
 
-    private boolean hasOverlap(PriceRequest request, List<Price> existingPrices) {
-        LocalDate newStart = request.getInitDate();
-        LocalDate newEnd = request.getEndDate();
-
-        for (Price existing : existingPrices) {
-            LocalDate existingStart = existing.getInitDate();
-            LocalDate existingEnd = existing.getEndDate();
-
-            // [A, B] and [C, D] overlap if A <= D and C <= B
-            boolean newStartsBeforeExistingEnds = (existingEnd == null || !newStart.isAfter(existingEnd));
-            boolean existingStartsBeforeNewEnds = (newEnd == null || !existingStart.isAfter(newEnd));
-
-            if (newStartsBeforeExistingEnds && existingStartsBeforeNewEnds) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     @Transactional(readOnly = true)
     public PriceValueResponse getPriceAtDate(Long productId, LocalDate date) {
-        Price price = priceRepository.findByProductIdAndDate(productId, date)
-                .orElseThrow(() -> new ResourceNotFoundException("Price not found for product id: " + productId + " at date: " + date));
-        return new PriceValueResponse(price.getValue());
+        List<Price> prices = priceRepository.findValidPrice(productId, date, PageRequest.of(0, 1));
+        if (prices.isEmpty()) {
+            throw new ResourceNotFoundException("Price not found for product id: " + productId + " at date: " + date);
+        }
+        return new PriceValueResponse(prices.get(0).getValue());
     }
 
     @Transactional(readOnly = true)
